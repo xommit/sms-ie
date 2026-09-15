@@ -181,6 +181,7 @@ private suspend fun mmsToJSON(
 ): Int {
     val prefs = PreferenceManager.getDefaultSharedPreferences(appContext)
     val includeBlobs = prefs.getBoolean("include_blobs", true)
+    val usedMmsBinaryEntries = mutableSetOf<String>()
     var progress = Progress(0, 0, null)
     val mmsCursor = appContext.contentResolver.query(
         Telephony.Mms.CONTENT_URI, null, messageSelection(appContext, MMS), null, null
@@ -284,7 +285,7 @@ private suspend fun mmsToJSON(
                             ) {
                                 var filename = mmsPart.getString(Telephony.Mms.Part._DATA)
                                     .toUri().lastPathSegment
-                                // see https://android.googlesource.com/platform/packages/providers/TelephonyProvider/+/master/src/com/android/providers/telephony/MmsProvider.java#520
+                                // See https://android.googlesource.com/platform/packages/providers/TelephonyProvider/+/master/src/com/android/providers/telephony/MmsProvider.java#520
                                 if (filename == null) {
                                     filename =
                                         "MISSING_FILENAME" + System.currentTimeMillis() + mmsPart.getString(
@@ -292,11 +293,31 @@ private suspend fun mmsToJSON(
                                         )
                                     mmsPart.put(Telephony.Mms.Part._DATA, filename)
                                 }
-                                filename = "data/$filename"
+                                val originalFilename = filename
+                                val partId = part.getString(partIdIndex)
+                                var duplicateIndex = 0
+                                var binaryDataEntry = "data/$filename"
+                                while (!usedMmsBinaryEntries.add(binaryDataEntry)) {
+                                    duplicateIndex++
+                                    filename = if (duplicateIndex == 1) {
+                                        "${partId}_$originalFilename"
+                                    } else {
+                                        "${partId}_${duplicateIndex}_$originalFilename"
+                                    }
+                                    binaryDataEntry = "data/$filename"
+                                }
+                                if (filename != originalFilename) {
+                                    // Keep the MMS part metadata aligned with the renamed ZIP entry so imports remain compatible.
+                                    mmsPart.put(Telephony.Mms.Part._DATA, filename)
+                                    Log.w(
+                                        LOG_TAG,
+                                        "Duplicate MMS binary filename '$originalFilename'; exporting as '$filename'"
+                                    )
+                                }
                                 mmsPartList.add(
                                     MmsBinaryPart(
-                                        ("content://mms/part/" + part.getString(partIdIndex)).toUri(),
-                                        filename
+                                        ("content://mms/part/$partId").toUri(),
+                                        binaryDataEntry
                                     )
                                 )
                             }
