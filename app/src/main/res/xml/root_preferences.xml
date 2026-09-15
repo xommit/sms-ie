@@ -21,7 +21,6 @@
   ~ along with SMS Import / Export.  If not, see <https://www.gnu.org/licenses/>
   ~
   -->
-
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:key="main_preference_screen">
@@ -183,10 +182,18 @@
             android:key="save_logcat"
             android:title="@string/pref_save_logcat_name" />
 
+        <Preference
+            android:key="open_log_dir"
+            android:title="Open log directory"
+            android:summary="Open the folder containing application log files"
+            app:singleLineTitle="false" />
+
         <SwitchPreferenceCompat
             android:key="debugging"
             android:title="Enable debugging options"
-            app:defaultValue="false" />
+            android:summary="Show advanced troubleshooting options. This does not enable logcat logging."
+            app:defaultValue="false"
+            app:singleLineTitle="false" />
 
         <EditTextPreference
             android:key="max_records"
