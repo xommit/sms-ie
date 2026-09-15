@@ -3,24 +3,30 @@ name: build
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - name: Clone
-      uses: actions/checkout@v4
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-    - name: Build
-      run: ./gradlew assembleStandardDebug
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: com.github.tmo1.sms_ie.standard.debug
-        path: ./app/build/outputs/apk/standard/debug/*.apk
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build
+        run: ./gradlew assembleStandardDebug
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: com.github.tmo1.sms_ie.standard.debug
+          path: ./app/build/outputs/apk/standard/debug/*.apk
