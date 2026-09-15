@@ -31,7 +31,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Build.VERSION.SDK_INT
 import android.os.Bundle
+import android.os.Environment
 import android.os.PowerManager
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
@@ -58,16 +60,22 @@ const val DISABLE_BATTERY_OPTIMIZATIONS = "disable_battery_optimizations"
 class SettingsActivity : AppCompatActivity() {
 
     //private lateinit var prefs: SharedPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
+
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.settings_activity)
+
         if (savedInstanceState == null) {
-            supportFragmentManager.beginTransaction().replace(R.id.settings, SettingsFragment())
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.settings, SettingsFragment())
                 .commit()
         }
 
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
+
         toolbar.avoidObstructions { insets ->
             // Shift the toolbar down using margins, but use padding for the sides. When the phone
             // is in landscape and the phone has a notch, it looks nicer to have the bar's
@@ -75,6 +83,7 @@ class SettingsActivity : AppCompatActivity() {
             updateLayoutParams<ViewGroup.MarginLayoutParams> {
                 topMargin = insets.top
             }
+
             updatePadding(
                 left = insets.left,
                 right = insets.right,
@@ -83,12 +92,14 @@ class SettingsActivity : AppCompatActivity() {
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
         //prefs = PreferenceManager.getDefaultSharedPreferences(this)
 
         setTitle(R.string.settings)
 
         supportFragmentManager.setFragmentResultListener(
-            "setPassphrase", this
+            "setPassphrase",
+            this
         ) { requestKey, bundle ->
             bundle.getString("passphrase")?.let {
                 val passphraseManager = PassphraseManager("passphrase_key", this)
@@ -101,17 +112,21 @@ class SettingsActivity : AppCompatActivity() {
 
         // https://stackoverflow.com/questions/70803830/updating-a-preference-summary-in-android-when-the-user-sets-it
         private val prefs by lazy { preferenceManager.sharedPreferences }
+
         private val targetDirPreference: Preference by lazy {
             findPreference(EXPORT_DIR) ?: error("Missing export directory preference!")
         }
+
         private val disableBattOptPreference: SwitchPreferenceCompat by lazy {
             findPreference(DISABLE_BATTERY_OPTIMIZATIONS)
                 ?: error("Missing disable battery optimizations preference!")
         }
+
         private val requestDisableBattOpt =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
                 updateBatteryOptimizationState()
             }
+
         private val requestPostNotification = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
@@ -119,7 +134,9 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         override fun onCreateRecyclerView(
-            inflater: LayoutInflater, parent: ViewGroup, savedInstanceState: Bundle?
+            inflater: LayoutInflater,
+            parent: ViewGroup,
+            savedInstanceState: Bundle?
         ): RecyclerView {
             val view = super.onCreateRecyclerView(inflater, parent, savedInstanceState)
 
@@ -146,7 +163,8 @@ class SettingsActivity : AppCompatActivity() {
             // The lazysodium Android binding requires API >= 21.
             // https://github.com/terl/lazysodium-android/blob/76e18548a0af285215f536c0d6d17369ac598311/app/build.gradle#L42
             if (SDK_INT < 21) {
-                val encryption = findPreference<PreferenceGroup>("encryption_preference_category")
+                val encryption =
+                    findPreference<PreferenceGroup>("encryption_preference_category")
                 encryption?.isEnabled = false
                 encryption?.summary = "Encryption requires API level >= 21"
             }
@@ -156,7 +174,6 @@ class SettingsActivity : AppCompatActivity() {
             // API level 21, so we disable scheduled export for API < 23.
             // https://stackoverflow.com/questions/32297765/android-timepicker-methods-being-stubs
             // https://developer.android.com/reference/android/content/Intent#ACTION_OPEN_DOCUMENT_TREE
-
             if (SDK_INT < 23) {
                 val scheduledExport =
                     findPreference<PreferenceGroup>("scheduled_export_preference_category")
@@ -168,14 +185,43 @@ class SettingsActivity : AppCompatActivity() {
                         //addCategory(Intent.CATEGORY_OPENABLE)
                         //putExtra(DocumentsContract.EXTRA_INITIAL_URI, "")
                     }
+
                     startActivityForResult(intent, REQUEST_EXPORT_FOLDER)
                     true
                 }
+
                 updateExportDirPreferenceSummary()
             }
 
             findPreference<SwitchPreferenceCompat>("save_logcat")!!.summary =
                 getString(R.string.pref_save_logcat_desc, logcatFile(requireContext()))
+
+            findPreference<Preference>("open_log_dir")?.setOnPreferenceClickListener {
+                val appExternalDir = requireContext().getExternalFilesDir(null)
+
+                if (appExternalDir == null) {
+                    Log.e(LOG_TAG, "External files directory is unavailable")
+                    return@setOnPreferenceClickListener true
+                }
+
+                val globalExternalDir = Environment.getExternalStorageDirectory()
+                val relativePath = appExternalDir.relativeTo(globalExternalDir).path
+
+                val directoryUri = DocumentsContract.buildDocumentUri(
+                    "com.android.externalstorage.documents",
+                    "primary:$relativePath"
+                )
+
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(
+                        directoryUri,
+                        "vnd.android.document/directory"
+                    )
+                }
+
+                startActivity(intent)
+                true
+            }
 
             if (SDK_INT >= Build.VERSION_CODES.M) {
                 disableBattOptPreference.setOnPreferenceChangeListener { _, newValue ->
@@ -183,14 +229,21 @@ class SettingsActivity : AppCompatActivity() {
                         requestDisableBattOpt.launch(
                             Intent(
                                 Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                Uri.fromParts("package", requireContext().packageName, null),
+                                Uri.fromParts(
+                                    "package",
+                                    requireContext().packageName,
+                                    null
+                                ),
                             )
                         )
                     } else {
                         // There is no API to request battery optimizations to be re-enabled, so
                         // send the user to Android's Settings page for them to do it manually.
-                        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        startActivity(
+                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        )
                     }
+
                     false
                 }
             }
@@ -201,19 +254,27 @@ class SettingsActivity : AppCompatActivity() {
             val prefListener =
                 SharedPreferences.OnSharedPreferenceChangeListener { sharedPrefs, key ->
                     if (key == "schedule_export") {
-                        context?.let { scheduleAutomaticExport(it, true) }
+                        context?.let {
+                            scheduleAutomaticExport(it, true)
+                        }
+
                         if (SDK_INT >= 33 && sharedPrefs.getBoolean(key, false)) {
                             context?.let {
-                                if (ContextCompat.checkSelfPermission(
-                                        it, Manifest.permission.POST_NOTIFICATIONS
+                                if (
+                                    ContextCompat.checkSelfPermission(
+                                        it,
+                                        Manifest.permission.POST_NOTIFICATIONS
                                     ) != PackageManager.PERMISSION_GRANTED
                                 ) {
-                                    requestPostNotification.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    requestPostNotification.launch(
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    )
                                 }
                             }
                         }
                     }
                 }
+
             prefs?.registerOnSharedPreferenceChangeListener(prefListener)
         }
 
@@ -231,9 +292,14 @@ class SettingsActivity : AppCompatActivity() {
             when (preference) {
                 is TimePickerPreference -> {
                     if (SDK_INT >= 23) {
-                        val timePickerDialog = TimePreferenceDialog.newInstance(preference.key)
+                        val timePickerDialog =
+                            TimePreferenceDialog.newInstance(preference.key)
+
                         timePickerDialog.setTargetFragment(this, 0)
-                        timePickerDialog.show(parentFragmentManager, "TimePickerDialog")
+                        timePickerDialog.show(
+                            parentFragmentManager,
+                            "TimePickerDialog"
+                        )
                     }
                 }
 
@@ -244,43 +310,78 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         @Deprecated("Deprecated in Java")
-        override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent?) {
+        override fun onActivityResult(
+            requestCode: Int,
+            resultCode: Int,
+            intent: Intent?
+        ) {
             super.onActivityResult(requestCode, resultCode, intent)
+
             // from: https://stackoverflow.com/questions/34331956/trying-to-takepersistableuripermission-fails-for-custom-documentsprovider-via
-            if (requestCode == REQUEST_EXPORT_FOLDER && resultCode == RESULT_OK && intent != null) {
+            if (
+                requestCode == REQUEST_EXPORT_FOLDER &&
+                resultCode == RESULT_OK &&
+                intent != null
+            ) {
                 val treeUri = intent.data
+
                 //Log.v(LOG_TAG, "Tree acquired: ${Uri.decode(treeUri.toString())}")
+
                 if (treeUri != null) {
                     // TODO: we should probably call releasePersistableUriPermission on the current URI
                     context?.contentResolver?.takePersistableUriPermission(
                         treeUri,
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )/*val documentTree = activity?.let { DocumentFile.fromTreeUri(it, treeUri) }
-                    val file = documentTree?.createFile("text/plain", "sms-ie.test")
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+
+                    /*
+                    val documentTree = activity?.let {
+                        DocumentFile.fromTreeUri(it, treeUri)
+                    }
+
+                    val file = documentTree?.createFile(
+                        "text/plain",
+                        "sms-ie.test"
+                    )
+
                     val fileUri = file?.uri
+
                     if (fileUri != null) {
-//                  Log.v(LOG_TAG, "File acquired: $fileUri")
-                        context?.contentResolver?.openOutputStream(fileUri).use { outputStream ->
-                            BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
+                        // Log.v(LOG_TAG, "File acquired: $fileUri")
+
+                        context?.contentResolver?.openOutputStream(fileUri).use {
+                            outputStream ->
+                            BufferedWriter(
+                                OutputStreamWriter(outputStream)
+                            ).use { writer ->
                                 writer.write("It works!")
                             }
                         }
-                    }*/
+                    }
+                    */
                 }
+
                 prefs?.edit {
                     putString(EXPORT_DIR, treeUri.toString())
                 }
+
                 updateExportDirPreferenceSummary()
-                // for worker testing: https://developer.android.com/topic/libraries/architecture/workmanager/basics#samples
-                /*val exportRequest: WorkRequest =
+
+                // for worker testing:
+                // https://developer.android.com/topic/libraries/architecture/workmanager/basics#samples
+                /*
+                val exportRequest: WorkRequest =
                     OneTimeWorkRequestBuilder<ExportWorker>()
                         .addTag(ImportExportWorker.TAG_AUTOMATIC_EXPORT)
                         .build()
+
                 activity?.let {
                     WorkManager
                         .getInstance(it)
                         .enqueue(exportRequest)
-                }*/
+                }
+                */
             } else {
                 Log.e(
                     LOG_TAG,
@@ -290,21 +391,28 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         private fun updateExportDirPreferenceSummary() {
-            targetDirPreference.summary = Uri.decode(prefs?.getString(EXPORT_DIR, ""))
+            targetDirPreference.summary =
+                Uri.decode(prefs?.getString(EXPORT_DIR, ""))
         }
 
         private fun updateBatteryOptimizationState() {
             if (SDK_INT >= Build.VERSION_CODES.M) {
                 val context = requireContext()
-                val pm: PowerManager = context.getSystemService(POWER_SERVICE) as PowerManager
+                val pm: PowerManager =
+                    context.getSystemService(POWER_SERVICE) as PowerManager
+
                 disableBattOptPreference.isChecked =
                     pm.isIgnoringBatteryOptimizations(context.packageName)
-            } else disableBattOptPreference.isVisible = false
+            } else {
+                disableBattOptPreference.isVisible = false
+            }
         }
     }
 
     fun onPassphraseButtonClick(view: View) {
-        PassphraseEntryFragment().show(supportFragmentManager, "passphrase_entry")
+        PassphraseEntryFragment().show(
+            supportFragmentManager,
+            "passphrase_entry"
+        )
     }
-
 }
